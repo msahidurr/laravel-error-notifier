@@ -50,11 +50,53 @@ TELEGRAM_ERROR_THREAD_ID=               # optional forum topic ID
 TELEGRAM_API_URL=https://api.telegram.org   # optional, for a self-hosted Bot API server
 ```
 
-To publish the config file:
+### Publishing the config file
+
+The `.env` variables above are enough for most apps. Publish the config file when you need to change options that have no env variable, such as `excluded_paths`, `excluded_exceptions`, `ignored_environments` or `trace_lines`.
 
 ```bash
 php artisan vendor:publish --tag=error-notifier-config
 ```
+
+This copies the package's default config to `config/error-notifier.php` in your app. Laravel uses your copy from then on. You can also publish by provider name:
+
+```bash
+php artisan vendor:publish --provider="Msahidurr\ErrorNotifier\ErrorNotifierServiceProvider"
+```
+
+Then edit `config/error-notifier.php`, for example:
+
+```php
+'excluded_paths' => [
+    'api/v2/otp/generate',
+    'health',
+],
+
+'excluded_exceptions' => [
+    \Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class,
+    \Illuminate\Auth\AuthenticationException::class,
+    \Illuminate\Validation\ValidationException::class,
+    \App\Exceptions\PaymentDeclinedException::class,
+],
+
+'trace_lines' => 10,
+```
+
+If your app caches its config (usual in production), rebuild the cache after any change:
+
+```bash
+php artisan config:cache
+```
+
+**Updating the package:** a published file isn't updated when the package is. New top-level options still work with their default values. New options inside `drivers.telegram` won't apply until you add them to your copy. To compare your file with the latest defaults, re-publish with `--force` (this overwrites your file, so commit it first):
+
+```bash
+php artisan vendor:publish --tag=error-notifier-config --force
+```
+
+If you only change values that have env variables, you don't need to publish the file at all.
+
+### Options
 
 | Key | Default | Description |
 |---|---|---|
