@@ -18,20 +18,6 @@ Sends your Laravel application's exceptions to the places your team already watc
 composer require msahidurr/laravel-error-notifier
 ```
 
-### Local path install (before publishing to Packagist)
-
-Add this to the application's `composer.json`:
-
-```json
-"repositories": [
-    { "type": "path", "url": "../laravel-error-notifier" }
-]
-```
-
-```bash
-composer require msahidurr/laravel-error-notifier:@dev
-```
-
 The service provider and the `ErrorNotifier` facade are auto-discovered.
 
 ## Quick start
