@@ -1,0 +1,52 @@
+{
+    "name": "msahidurr/laravel-error-notifier",
+    "description": "Send Laravel exception reports to Telegram and other channels.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "exceptions", "error-reporting", "notifications", "monitoring", "telegram"],
+    "authors": [
+        {
+            "name": "msahidurr"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "guzzlehttp/guzzle": "^7.2",
+        "illuminate/support": "^9.0|^10.0|^11.0|^12.0",
+        "illuminate/http": "^9.0|^10.0|^11.0|^12.0",
+        "illuminate/console": "^9.0|^10.0|^11.0|^12.0",
+        "illuminate/contracts": "^9.0|^10.0|^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^7.0|^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^9.5|^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Msahidurr\\ErrorNotifier\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Msahidurr\\ErrorNotifier\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Msahidurr\\ErrorNotifier\\ErrorNotifierServiceProvider"
+            ],
+            "aliases": {
+                "ErrorNotifier": "Msahidurr\\ErrorNotifier\\Facades\\ErrorNotifier"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
