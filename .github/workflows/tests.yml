@@ -6,7 +6,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +21,7 @@ jobs:
     name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -30,6 +30,11 @@ jobs:
           coverage: none
 
       - name: Install dependencies
+        env:
+          # Every Laravel 9/10/11 release has a published security advisory, and
+          # Composer refuses to install those by default. That's fine for testing
+          # compatibility here; it doesn't affect apps that install this package.
+          COMPOSER_NO_SECURITY_BLOCKING: 1
         run: |
           composer require "illuminate/support:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --dev --no-interaction --no-update
           composer update --prefer-dist --no-interaction --with-all-dependencies
