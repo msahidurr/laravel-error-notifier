@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laravel Error Notifier Guide</title>
+<meta name="description" content="User guide for msahidurr/laravel-error-notifier: install, channel setup, filters, queue, configuration and troubleshooting.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: dark full-bleed hero (title + a live-looking alert), then a sticky contents rail beside one ~68ch reading column; stacks on phones.
+   Colour logic: red = an error / a "no", green = delivered, blue = links and navigation, navy = the hero and code (terminal). */
+:root {
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #f8f9fc;
+  --fg: #142033;
+  --muted: #5a6779;
+  --line: #dde3ec;
+  --link: #2c58d1;
+  --link-soft: #e8eefc;
+  --signal: #d7373d;
+  --signal-soft: #fdebec;
+  --ok: #18874a;
+  --ok-soft: #e4f4ea;
+  --hero-bg: #0d1828;
+  --hero-fg: #eef2f8;
+  --hero-muted: #9daecb;
+  --hero-line: #22324a;
+  --hero-card: #14223a;
+  --code-bg: #101b2c;
+  --code-fg: #d9e2f1;
+  --code-muted: #7c8ca6;
+  --code-key: #8db3ff;
+  --code-str: #f2b880;
+  --code-line: #1f2d44;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3rem;
+  --step-2: 1.85rem;
+  --step-3: clamp(2.2rem, 1.6rem + 2.6vw, 3.4rem);
+  --radius: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1019; --surface: #111a27; --surface-2: #0e1621; --fg: #e4eaf3; --muted: #98a5b9; --line: #223047;
+    --link: #8fb0ff; --link-soft: #17233b; --signal: #ff6b70; --signal-soft: #2b1519; --ok: #4ad68a; --ok-soft: #12261b;
+    --hero-bg: #0f1b2e; --hero-fg: #eef2f8; --hero-muted: #9daecb; --hero-line: #26385a; --hero-card: #16263f;
+    --code-bg: #0c1522; --code-fg: #d9e2f1; --code-muted: #7c8ca6; --code-key: #8db3ff; --code-str: #f2b880; --code-line: #1c2a40;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a1019; --surface: #111a27; --surface-2: #0e1621; --fg: #e4eaf3; --muted: #98a5b9; --line: #223047;
+  --link: #8fb0ff; --link-soft: #17233b; --signal: #ff6b70; --signal-soft: #2b1519; --ok: #4ad68a; --ok-soft: #12261b;
+  --hero-bg: #0f1b2e; --hero-fg: #eef2f8; --hero-muted: #9daecb; --hero-line: #26385a; --hero-card: #16263f;
+  --code-bg: #0c1522; --code-fg: #d9e2f1; --code-muted: #7c8ca6; --code-key: #8db3ff; --code-str: #f2b880; --code-line: #1c2a40;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 var(--step-0)/1.65 var(--font-body);
+}
+a { color: var(--link); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: 78rem; margin-inline: auto; padding-inline: 16px; }
+@media (min-width: 640px) { .wrap { padding-inline: 28px; } }
+
+/* ---------- Hero ---------- */
+.hero {
+  background:
+    radial-gradient(60rem 22rem at 85% -10%, rgba(215, 55, 61, 0.22), transparent 60%),
+    linear-gradient(var(--hero-bg), var(--hero-bg));
+  color: var(--hero-fg);
+  border-bottom: 1px solid var(--hero-line);
+}
+.hero .wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 3rem;
+  align-items: center;
+  padding-block: 3.5rem 3.75rem;
+}
+@media (max-width: 900px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 2.25rem; padding-block: 2.5rem 2.75rem; } }
+.pkg {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font: 500 0.8rem var(--font-mono);
+  color: var(--hero-muted);
+  margin: 0 0 1.1rem;
+}
+.pkg .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px rgba(215, 55, 61, 0.25); }
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: var(--step-3);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+.hero h1 span { color: var(--hero-muted); font-weight: 500; }
+.hero .lead { font-size: 1.2rem; color: var(--hero-muted); margin: 1.1rem 0 0; max-width: 36rem; }
+.hero .lead strong { color: var(--hero-fg); font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.6rem 1.05rem;
+  border-radius: 8px;
+  font-weight: 600; font-size: 0.98rem;
+  text-decoration: none;
+  border: 1px solid var(--hero-line);
+  color: var(--hero-fg);
+}
+.btn.primary { background: var(--hero-fg); color: var(--hero-bg); border-color: var(--hero-fg); }
+.btn:hover { text-decoration: none; filter: brightness(1.08); }
+.meta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+.meta span {
+  font: 500 0.75rem var(--font-mono);
+  color: var(--hero-muted);
+  border: 1px solid var(--hero-line);
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+}
+
+/* Alert card in the hero: what a real Telegram alert looks like */
+.alert {
+  background: var(--hero-card);
+  border: 1px solid var(--hero-line);
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem 1.2rem;
+  font-size: 0.93rem;
+  line-height: 1.5;
+  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.55);
+  min-width: 0;
+}
+.alert-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.85rem; }
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--signal); color: #fff;
+  font: 700 0.8rem var(--font-mono);
+  flex: none;
+}
+.alert-head b { display: block; font-size: 0.92rem; }
+.alert-head small { color: var(--hero-muted); font: 400 0.75rem var(--font-mono); }
+.alert-title { font-weight: 700; color: #ff8a8e; margin-bottom: 0.5rem; }
+.alert dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.28rem 0.85rem; margin: 0; }
+.alert dt { color: var(--hero-muted); }
+.alert dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.alert code { font: 400 0.8rem/1.45 var(--font-mono); color: #c9d6ee; background: rgba(255, 255, 255, 0.06); padding: 0.05rem 0.35rem; border-radius: 4px; }
+
+/* ---------- Page body ---------- */
+.page {
+  display: grid;
+  grid-template-columns: 14.5rem minmax(0, 1fr);
+  gap: 3.5rem;
+  padding-block: 0 5rem;
+}
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+.toc {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  align-self: start;
+  padding-block: 2.75rem 1rem;
+  font-size: var(--step--1);
+}
+.toc-label { font: 600 0.72rem var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.8rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; counter-reset: toc; }
+.toc li { counter-increment: toc; }
+.toc a {
+  display: flex; gap: 0.6rem;
+  padding: 0.38rem 0.65rem;
+  border-radius: 7px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.toc a::before { content: counter(toc, decimal-leading-zero); font: 500 0.72rem/1.9 var(--font-mono); color: var(--muted); opacity: 0.6; }
+.toc a.active::before { opacity: 1; }
+.toc a:hover { color: var(--fg); background: var(--surface); }
+.toc a.active { color: var(--fg); background: var(--surface); box-shadow: inset 2px 0 0 var(--signal); font-weight: 600; }
+.toc a.active::before { color: var(--signal); }
+@media (max-width: 900px) {
+  .toc { position: static; padding-block: 1.75rem 0; }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+}
+
+main { min-width: 0; max-width: 47rem; padding-block: 1rem 0; }
+section { padding-top: 2.5rem; }
+h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; margin-bottom: 1rem; display: flex; align-items: baseline; gap: 0.75rem; }
+h2 .n { font: 500 0.85rem var(--font-mono); color: var(--signal); letter-spacing: 0; }
+h3 { font-size: var(--step-1); font-weight: 700; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin-bottom: 0.4rem; }
+strong { font-weight: 700; }
+.muted { color: var(--muted); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  background: var(--link-soft);
+  color: var(--fg);
+  padding: 0.12em 0.38em;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+
+/* Terminal-style code blocks */
+.code {
+  position: relative;
+  margin: 0.8rem 0 1.3rem;
+  background: var(--code-bg);
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.code-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.45rem 0.55rem 0.45rem 0.9rem;
+  border-bottom: 1px solid var(--code-line);
+}
+.code-bar .lang { font: 500 0.7rem var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--code-muted); }
+.code pre {
+  margin: 0;
+  padding: 0.95rem 1.1rem 1.05rem;
+  overflow-x: auto;
+  font: 400 0.84rem/1.65 var(--font-mono);
+  color: var(--code-fg);
+  tab-size: 4;
+}
+.code pre code { background: none; padding: 0; font-size: inherit; color: inherit; overflow-wrap: normal; }
+.code .k { color: var(--code-key); }
+.code .s { color: var(--code-str); }
+.code .c { color: var(--code-muted); }
+.code .p { color: var(--code-muted); user-select: none; }
+.copy {
+  font: 500 0.72rem var(--font-mono);
+  color: var(--code-fg);
+  background: transparent;
+  border: 1px solid var(--code-line);
+  border-radius: 6px;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+}
+.copy:hover { border-color: var(--code-muted); }
+.copy.done { color: #6fe0a0; border-color: #2f7a52; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; margin: 0.8rem 0 1.3rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--line); }
+th { font: 600 0.7rem var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface-2); }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: 0.88rem; }
+td code { white-space: nowrap; }
+td:first-child { font-weight: 600; }
+
+/* Numbered steps */
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1.25rem 0; }
+.steps > li { counter-increment: step; position: relative; padding-left: 2.75rem; padding-bottom: 1.25rem; margin: 0; }
+.steps > li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: 0;
+  width: 1.85rem; height: 1.85rem; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 600 0.82rem var(--font-mono);
+  color: #fff; background: var(--signal);
+}
+.steps > li:not(:last-child)::after {
+  content: ""; position: absolute; left: calc(0.925rem - 1px); top: 2.15rem; bottom: 0.25rem;
+  width: 2px; background: var(--line);
+}
+
+/* Callouts */
+.note {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.95rem 1.1rem;
+  margin: 1rem 0 1.3rem;
+}
+.note .tag { font: 600 0.7rem/1.9 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--link); background: var(--link-soft); border-radius: 6px; padding: 0 0.5rem; align-self: start; }
+.note.warn .tag { color: var(--signal); background: var(--signal-soft); }
+.note p:last-child { margin-bottom: 0; }
+
+/* Channel cards */
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(19.5rem, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+.channel {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.25rem 0.5rem;
+}
+.channel-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.85rem; }
+.mono {
+  width: 2.3rem; height: 2.3rem; border-radius: 10px;
+  display: grid; place-items: center;
+  font: 700 0.78rem var(--font-mono);
+  color: var(--link); background: var(--link-soft);
+  flex: none;
+}
+.channel h3 { font-size: 1.1rem; }
+.channel-head code { font-size: 0.72rem; margin-left: auto; }
+.channel ol { padding-left: 1.15rem; font-size: 0.97rem; }
+.channel p { font-size: 0.93rem; color: var(--muted); }
+
+/* Flow diagram */
+figure { margin: 1.25rem 0 1.6rem; }
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 0.75rem; }
+.diagram svg { display: block; width: 100%; min-width: 34rem; height: auto; }
+.diagram .box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.5; }
+.diagram .box.start { fill: var(--surface); stroke: var(--muted); }
+.diagram .box.final { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 2; }
+.diagram .label { fill: var(--fg); font: 400 13px var(--font-body); }
+.diagram .label.strong { font-weight: 700; }
+.diagram .no { fill: var(--signal); font: 600 11.5px var(--font-mono); }
+.diagram .note-text { fill: var(--muted); font: 400 12px var(--font-body); }
+.diagram .group { fill: var(--muted); font: 600 10.5px var(--font-mono); letter-spacing: 0.08em; }
+.diagram .wire { stroke: var(--muted); stroke-width: 1.25; fill: none; }
+.diagram .bracket { stroke: var(--line); stroke-width: 2; }
+.diagram .arrowhead { fill: var(--muted); }
+figcaption { font-size: var(--step--1); color: var(--muted); margin-top: 0.55rem; }
+
+/* Settings list in the filters section */
+.rules { display: grid; gap: 0.25rem; margin: 1.25rem 0 0; }
+.rule h3 { font-size: 1.08rem; margin: 1.25rem 0 0.4rem; }
+
+/* Security list */
+.checks { list-style: none; padding: 0; display: grid; gap: 0.6rem; }
+.checks li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.75rem 1rem; margin: 0;
+}
+
+footer { margin-top: 4.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--step--1); display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <p class="pkg"><span class="dot" aria-hidden="true"></span>msahidurr/laravel-error-notifier</p>
+      <h1>Laravel Error Notifier <span>user guide</span></h1>
+      <p class="lead">Your team hears about an exception <strong>the moment Laravel reports it</strong>, in Telegram, Slack, Teams or any of 9 channels.</p>
+      <div class="actions">
+        <a class="btn primary" href="#quick-start">Quick start</a>
+        <a class="btn" href="#setup">Set up a channel</a>
+      </div>
+      <div class="meta">
+        <span>PHP 8.1+</span>
+        <span>Laravel 9 · 10 · 11 · 12</span>
+        <span>Updated 7 Oct 2026</span>
+      </div>
+    </div>
+
+    <div class="alert" id="top-alert" aria-label="Example alert as it appears in Telegram">
+      <div class="alert-head">
+        <div class="avatar" aria-hidden="true">EN</div>
+        <div><b>Error Notifier bot</b><small>Example alert · Telegram</small></div>
+      </div>
+      <div class="alert-title">APIs Error</div>
+      <dl>
+        <dt>Project</dt><dd>Daktarbhai API</dd>
+        <dt>Environment</dt><dd>production</dd>
+        <dt>Exception</dt><dd><code>Illuminate\Database\QueryException</code></dd>
+        <dt>Message</dt><dd><code>SQLSTATE[HY000] [2002] Connection refused</code></dd>
+        <dt>Request</dt><dd><code>GET /v2/doctors?page=2</code></dd>
+        <dt>User</dt><dd>1532 (Rahim Uddin)</dd>
+        <dt>File</dt><dd><code>app/Services/DoctorService.php:88</code></dd>
+        <dt>Time</dt><dd>2026-10-07 14:32:05 +06</dd>
+      </dl>
+    </div>
+  </div>
+</header>
+
+<div class="wrap page">
+  <nav class="toc" aria-label="Contents">
+    <p class="toc-label">On this page</p>
+    <ol>
+      <li><a href="#what-it-is">What it is</a></li>
+      <li><a href="#quick-start">Install and quick start</a></li>
+      <li><a href="#channels">Choosing channels</a></li>
+      <li><a href="#setup">Channel setup</a></li>
+      <li><a href="#filters">What gets sent</a></li>
+      <li><a href="#queue">Sending from a queue</a></li>
+      <li><a href="#config">Configuration</a></li>
+      <li><a href="#alert">Reading an alert</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#security">Security</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="what-it-is">
+      <h2><span class="n">01</span>What it is</h2>
+      <p>Laravel Error Notifier sends a message to your team every time your Laravel app reports an exception. It plugs into Laravel's own error handling, so once it is installed and switched on, you don't call it anywhere in your code.</p>
+      <p>Each alert says what failed, where (file and line), and who hit it (request, user, IP or artisan command). It can go to one or several channels at once: Telegram, Slack, Mattermost, Discord, Google Chat, Microsoft Teams, email, PagerDuty or any webhook.</p>
+      <p><strong>Requirements:</strong> PHP 8.1 or newer and Laravel 9, 10, 11 or 12. Each channel needs its own account or webhook URL; nothing else is required.</p>
+    </section>
+
+    <section id="quick-start">
+      <h2><span class="n">02</span>Install and quick start</h2>
+      <p>You can have Telegram alerts working in about five minutes.</p>
+      <ol class="steps">
+        <li>
+          Install the package in your Laravel app:
+          <div class="code"><div class="code-bar"><span class="lang">bash</span></div><pre><code><span class="p">$ </span>composer require msahidurr/laravel-error-notifier</code></pre></div>
+          The service provider and the <code>ErrorNotifier</code> facade register themselves; there is nothing to add to <code>config/app.php</code>.
+        </li>
+        <li>
+          Add these lines to <code>.env</code> (the <a href="#setup-telegram">Telegram setup steps</a> show how to get the token and chat ID):
+          <div class="code"><div class="code-bar"><span class="lang">.env</span></div><pre><code><span class="k">ERROR_NOTIFIER_ENABLED</span>=true
+<span class="k">ERROR_NOTIFIER_CHANNELS</span>=telegram
+<span class="k">ERROR_NOTIFIER_TITLE</span>=<span class="s">"APIs Error"</span>
+
+<span class="k">TELEGRAM_BOT_TOKEN</span>=123456:ABC-your-bot-token
+<span class="k">TELEGRAM_ERROR_CHAT_ID</span>=-1001234567890</code></pre></div>
+        </li>
+        <li>
+          If your app caches its config, rebuild it:
+          <div class="code"><div class="code-bar"><span class="lang">bash</span></div><pre><code><span class="p">$ </span>php artisan config:cache</code></pre></div>
+        </li>
+        <li>
+          Send a test message:
+          <div class="code"><div class="code-bar"><span class="lang">bash</span></div><pre><code><span class="p">$ </span>php artisan error-notifier:test
+<span class="c">✔ telegram: sent</span></code></pre></div>
+          You should see <code>telegram: sent</code> in the terminal and a test alert in the chat.
+        </li>
+      </ol>
+      <div class="note"><span class="tag">Note</span><p>Real errors are not sent from the <code>local</code> and <code>testing</code> environments by default, so you won't get alerts while developing. The test command works in every environment.</p></div>
+    </section>
+
+    <section id="channels">
+      <h2><span class="n">03</span>Choosing channels</h2>
+      <p>Pick the channel your team already reads; add PagerDuty only if someone is on call. List the channels you want in <code>ERROR_NOTIFIER_CHANNELS</code>, separated by commas (for example <code>telegram,slack,mail</code>). Every report goes to every listed channel.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Name in config</th><th>Required env variables</th><th>Limit / min</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td>Telegram</td><td><code>telegram</code></td><td><code>TELEGRAM_BOT_TOKEN</code> <code>TELEGRAM_ERROR_CHAT_ID</code></td><td class="num">20</td><td>Small teams, mobile alerts</td></tr>
+            <tr><td>Slack</td><td><code>slack</code></td><td><code>SLACK_ERROR_WEBHOOK_URL</code></td><td class="num">50</td><td>Teams on Slack</td></tr>
+            <tr><td>Mattermost</td><td><code>mattermost</code></td><td><code>MATTERMOST_ERROR_WEBHOOK_URL</code></td><td class="num">50</td><td>Self-hosted chat</td></tr>
+            <tr><td>Discord</td><td><code>discord</code></td><td><code>DISCORD_ERROR_WEBHOOK_URL</code></td><td class="num">25</td><td>Teams on Discord</td></tr>
+            <tr><td>Google Chat</td><td><code>google_chat</code></td><td><code>GOOGLE_CHAT_ERROR_WEBHOOK_URL</code></td><td class="num">50</td><td>Google Workspace teams</td></tr>
+            <tr><td>Microsoft Teams</td><td><code>teams</code></td><td><code>TEAMS_ERROR_WEBHOOK_URL</code></td><td class="num">30</td><td>Microsoft 365 teams</td></tr>
+            <tr><td>Email</td><td><code>mail</code></td><td><code>ERROR_NOTIFIER_MAIL_TO</code></td><td class="num">10</td><td>A backup channel, managers</td></tr>
+            <tr><td>Webhook</td><td><code>webhook</code></td><td><code>ERROR_NOTIFIER_WEBHOOK_URL</code></td><td class="num">60</td><td>n8n, Zapier, your own tools</td></tr>
+            <tr><td>PagerDuty</td><td><code>pagerduty</code></td><td><code>PAGERDUTY_ROUTING_KEY</code></td><td class="num">60</td><td>Waking the on-call person</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">The default limit sits just under what each service allows. When a channel reaches it, extra reports in that minute are dropped for that channel only, and one warning is written to the Laravel log.</p>
+    </section>
+
+    <section id="setup">
+      <h2><span class="n">04</span>Channel setup step by step</h2>
+      <p>Each channel needs one credential from the service. Add it to <code>.env</code>, add the channel name to <code>ERROR_NOTIFIER_CHANNELS</code>, then check it with <code>php artisan error-notifier:test --channel=&lt;name&gt;</code>.</p>
+
+      <div class="channels">
+        <article class="channel" id="setup-telegram">
+          <div class="channel-head"><span class="mono" aria-hidden="true">TG</span><h3>Telegram</h3><code>telegram</code></div>
+          <ol>
+            <li>In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, send <code>/newbot</code>, and copy the token → <code>TELEGRAM_BOT_TOKEN</code>.</li>
+            <li>Add the bot to your group and send any message in the group.</li>
+            <li>Open <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> in a browser and copy <code>chat.id</code> → <code>TELEGRAM_ERROR_CHAT_ID</code>. Group IDs start with <code>-</code>.</li>
+            <li>Optional: for a forum group, set <code>TELEGRAM_ERROR_THREAD_ID</code> to the topic ID.</li>
+          </ol>
+        </article>
+
+        <article class="channel" id="setup-slack">
+          <div class="channel-head"><span class="mono" aria-hidden="true">SL</span><h3>Slack</h3><code>slack</code></div>
+          <ol>
+            <li>Create a Slack app at <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> and turn on <strong>Incoming Webhooks</strong>.</li>
+            <li>Click <strong>Add New Webhook to Workspace</strong>, pick the channel, and copy the URL → <code>SLACK_ERROR_WEBHOOK_URL</code>.</li>
+          </ol>
+        </article>
+
+        <article class="channel" id="setup-mattermost">
+          <div class="channel-head"><span class="mono" aria-hidden="true">MM</span><h3>Mattermost</h3><code>mattermost</code></div>
+          <ol>
+            <li>Go to <strong>Integrations → Incoming Webhooks → Add Incoming Webhook</strong> and pick the channel.</li>
+            <li>Copy the URL → <code>MATTERMOST_ERROR_WEBHOOK_URL</code>.</li>
+          </ol>
+        </article>
+
+        <article class="channel" id="setup-discord">
+          <div class="channel-head"><span class="mono" aria-hidden="true">DC</span><h3>Discord</h3><code>discord</code></div>
+          <ol>
+            <li>Open the channel's <strong>Edit Channel → Integrations → Webhooks → New Webhook</strong>.</li>
+            <li>Click <strong>Copy Webhook URL</strong> → <code>DISCORD_ERROR_WEBHOOK_URL</code>.</li>
+            <li>Optional: <code>DISCORD_ERROR_USERNAME</code> sets the sender name.</li>
+          </ol>
+          <p>Mentions like <code>@everyone</code> inside error messages never ping anyone.</p>
+        </article>
+
+        <article class="channel" id="setup-google-chat">
+          <div class="channel-head"><span class="mono" aria-hidden="true">GC</span><h3>Google Chat</h3><code>google_chat</code></div>
+          <ol>
+            <li>In the space, open <strong>Apps &amp; integrations → Webhooks → Add webhook</strong>.</li>
+            <li>Copy the URL → <code>GOOGLE_CHAT_ERROR_WEBHOOK_URL</code>.</li>
+            <li>Optional: set <code>GOOGLE_CHAT_ERROR_THREAD_KEY=errors</code> to keep all alerts in one thread instead of filling the space.</li>
+          </ol>
+        </article>
+
+        <article class="channel" id="setup-teams">
+          <div class="channel-head"><span class="mono" aria-hidden="true">MT</span><h3>Microsoft Teams</h3><code>teams</code></div>
+          <ol>
+            <li>In the channel, open <strong>Workflows</strong> and choose <strong>Post to a channel when a webhook request is received</strong>.</li>
+            <li>Finish the template and copy the URL it gives you → <code>TEAMS_ERROR_WEBHOOK_URL</code>.</li>
+          </ol>
+          <p>The old <strong>Incoming Webhook</strong> connector URLs were switched off by Microsoft in May 2026 and will not work. Alerts appear from "Flow bot"; the sender name can't be changed.</p>
+        </article>
+
+        <article class="channel" id="setup-mail">
+          <div class="channel-head"><span class="mono" aria-hidden="true">EM</span><h3>Email</h3><code>mail</code></div>
+          <ol>
+            <li>Make sure your app can already send mail (the <code>MAIL_*</code> settings).</li>
+            <li>Set <code>ERROR_NOTIFIER_MAIL_TO</code> to one or more addresses, separated by commas.</li>
+            <li>Optional: <code>ERROR_NOTIFIER_MAIL_FROM</code> and <code>ERROR_NOTIFIER_MAILER</code> (for example a separate SMTP mailer).</li>
+          </ol>
+          <p>Sending mail can take a few seconds, so <a href="#queue">turn on the queue</a> when you use email.</p>
+        </article>
+
+        <article class="channel" id="setup-webhook">
+          <div class="channel-head"><span class="mono" aria-hidden="true">WH</span><h3>Webhook</h3><code>webhook</code></div>
+          <ol>
+            <li>Set <code>ERROR_NOTIFIER_WEBHOOK_URL</code> to the URL that should receive the alerts.</li>
+            <li>Optional: set <code>ERROR_NOTIFIER_WEBHOOK_SECRET</code>. Each request then carries <code>X-Error-Notifier-Signature: sha256=&lt;hmac&gt;</code>, so the receiver can check it came from your app.</li>
+          </ol>
+          <p>The body is JSON: <code>title</code>, <code>app</code>, <code>environment</code>, <code>exception</code>, <code>message</code>, <code>file</code>, <code>line</code>, <code>context</code>, <code>trace</code>, <code>time</code>, <code>fingerprint</code>.</p>
+        </article>
+
+        <article class="channel" id="setup-pagerduty">
+          <div class="channel-head"><span class="mono" aria-hidden="true">PD</span><h3>PagerDuty</h3><code>pagerduty</code></div>
+          <ol>
+            <li>Open the service → <strong>Integrations → Add integration → Events API V2</strong>.</li>
+            <li>Copy the <strong>Integration Key</strong> → <code>PAGERDUTY_ROUTING_KEY</code>.</li>
+            <li>Optional: <code>PAGERDUTY_SEVERITY</code> (<code>critical</code>, <code>error</code>, <code>warning</code> or <code>info</code>; default <code>error</code>).</li>
+          </ol>
+          <p>Repeats of the same error update one incident instead of opening a new one each time.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="filters">
+      <h2><span class="n">05</span>Controlling what gets sent</h2>
+      <p>Every error goes through the same checks in order; the first "no" stops it. The first three apply once per error, the last two separately for each channel.</p>
+
+      <figure>
+        <div class="diagram">
+          <svg viewBox="0 0 760 576" role="img" aria-label="An error is sent only after it passes every check">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path class="arrowhead" d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <path class="wire" d="M300 104V126" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 168V190" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 232V254" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 296V318" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 360V382" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 424V446" marker-end="url(#arrow)"/>
+            <path class="wire" d="M300 488V510" marker-end="url(#arrow)"/>
+
+            <line class="bracket" x1="104" y1="128" x2="104" y2="296"/>
+            <text class="group" x="24" y="208">ONCE PER</text>
+            <text class="group" x="24" y="223">ERROR</text>
+            <line class="bracket" x1="104" y1="384" x2="104" y2="552"/>
+            <text class="group" x="24" y="464">EACH</text>
+            <text class="group" x="24" y="479">CHANNEL</text>
+
+            <rect class="box start" x="120" y="64" width="360" height="40" rx="10"/>
+            <text class="label strong" x="300" y="88" text-anchor="middle">An exception is reported</text>
+
+            <rect class="box" x="120" y="128" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="152" text-anchor="middle">Enabled, and environment not ignored?</text>
+            <text class="no" x="496" y="152">no</text><text class="note-text" x="520" y="152">nothing sent</text>
+
+            <rect class="box" x="120" y="192" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="216" text-anchor="middle">Path and exception type not excluded?</text>
+            <text class="no" x="496" y="216">no</text><text class="note-text" x="520" y="216">nothing sent</text>
+
+            <rect class="box" x="120" y="256" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="280" text-anchor="middle">Not already sent in the last 60 seconds?</text>
+            <text class="no" x="496" y="280">no</text><text class="note-text" x="520" y="280">duplicate dropped</text>
+
+            <rect class="box" x="120" y="320" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="344" text-anchor="middle">Sent now, or by a queue worker if queue is on</text>
+
+            <rect class="box" x="120" y="384" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="408" text-anchor="middle">Channel's only / except filters allow it?</text>
+            <text class="no" x="496" y="408">no</text><text class="note-text" x="520" y="408">skipped for this channel</text>
+
+            <rect class="box" x="120" y="448" width="360" height="40" rx="10"/>
+            <text class="label" x="300" y="472" text-anchor="middle">Channel under its per-minute limit?</text>
+            <text class="no" x="496" y="472">no</text><text class="note-text" x="520" y="472">dropped, one log warning</text>
+
+            <rect class="box final" x="120" y="512" width="360" height="40" rx="10"/>
+            <text class="label strong" x="300" y="536" text-anchor="middle">Alert delivered to the channel</text>
+            <text class="note-text" x="496" y="536">if it fails: logged, others still sent</text>
+          </svg>
+        </div>
+        <figcaption>What happens to an error: 5 checks before delivery.</figcaption>
+      </figure>
+
+      <div class="rules">
+        <div class="rule">
+          <h3>Environments</h3>
+          <p><code>local</code> and <code>testing</code> never send real errors. Change the list with <code>ignored_environments</code> in the published config.</p>
+        </div>
+        <div class="rule">
+          <h3>Paths</h3>
+          <p>Add URL paths that should never alert, for example a noisy OTP endpoint. Each path also covers everything under it:</p>
+          <div class="code"><div class="code-bar"><span class="lang">config/error-notifier.php</span></div><pre><code><span class="s">'excluded_paths'</span> => [
+    <span class="s">'api/v2/otp/generate'</span>,
+    <span class="s">'health'</span>,
+],</code></pre></div>
+        </div>
+        <div class="rule">
+          <h3>Exception types</h3>
+          <p>404s, failed logins and validation errors are skipped by default. Add your own (subclasses count too):</p>
+          <div class="code"><div class="code-bar"><span class="lang">config/error-notifier.php</span></div><pre><code><span class="s">'excluded_exceptions'</span> => [
+    <span class="k">\Symfony\Component\HttpKernel\Exception\NotFoundHttpException</span>::class,
+    <span class="k">\Illuminate\Auth\AuthenticationException</span>::class,
+    <span class="k">\Illuminate\Validation\ValidationException</span>::class,
+    <span class="k">\App\Exceptions\PaymentDeclinedException</span>::class,
+],</code></pre></div>
+        </div>
+        <div class="rule">
+          <h3>Duplicates</h3>
+          <p>The same error (same type, file, line and message) is sent once per 60 seconds. Change it with <code>ERROR_NOTIFIER_THROTTLE</code> (seconds; <code>0</code> turns it off).</p>
+        </div>
+        <div class="rule">
+          <h3>Per-channel filters and limits</h3>
+          <p>Each channel can take only some errors, skip some, and cap messages per minute. For example, everything goes to Slack, but PagerDuty only pages for database errors:</p>
+          <div class="code"><div class="code-bar"><span class="lang">config/error-notifier.php</span></div><pre><code><span class="s">'drivers'</span> => [
+    <span class="s">'slack'</span> => [
+        <span class="s">'webhook_url'</span> => env(<span class="s">'SLACK_ERROR_WEBHOOK_URL'</span>),
+        <span class="s">'rate_limit'</span> => 50,
+        <span class="s">'except_exceptions'</span> => [<span class="k">\App\Exceptions\NoisyException</span>::class],
+    ],
+    <span class="s">'pagerduty'</span> => [
+        <span class="s">'routing_key'</span> => env(<span class="s">'PAGERDUTY_ROUTING_KEY'</span>),
+        <span class="s">'only_exceptions'</span> => [<span class="k">\Illuminate\Database\QueryException</span>::class],
+    ],
+],</code></pre></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="queue">
+      <h2><span class="n">06</span>Sending from a queue</h2>
+      <p>Turn on the queue if you use email or more than one channel. Without it, alerts are sent while Laravel handles the failing request, and each channel can add up to 5 seconds (10 for Teams) to that request.</p>
+      <div class="code"><div class="code-bar"><span class="lang">.env</span></div><pre><code><span class="k">ERROR_NOTIFIER_QUEUE</span>=true
+<span class="k">ERROR_NOTIFIER_QUEUE_CONNECTION</span>=redis   <span class="c"># optional, defaults to QUEUE_CONNECTION</span>
+<span class="k">ERROR_NOTIFIER_QUEUE_NAME</span>=alerts        <span class="c"># optional</span></code></pre></div>
+      <div class="note warn"><span class="tag">Needed</span><p>A queue worker must be running (<code>php artisan queue:work</code>, usually under Supervisor). Without one, alerts wait in the queue and never arrive.</p></div>
+      <ul>
+        <li>If the alert can't be queued (for example Redis is the thing that's down), it is sent immediately instead, so you still hear about it.</li>
+        <li>Alerts are still queued when the error rolls back a database transaction, even on a queue connection set to <code>after_commit</code>.</li>
+        <li>Failed alert jobs are not retried, so a broken channel never sends you the same alert twice.</li>
+        <li>The alert keeps the original details: the request URL or artisan command, not <code>queue:work</code>.</li>
+      </ul>
+    </section>
+
+    <section id="config">
+      <h2><span class="n">07</span>Configuration reference</h2>
+      <p>Most apps only need <code>.env</code>. Publish the config file when you need settings that have no env variable: excluded paths, excluded exceptions, per-channel filters, ignored environments or stack trace lines.</p>
+      <div class="code"><div class="code-bar"><span class="lang">bash</span></div><pre><code><span class="p">$ </span>php artisan vendor:publish --tag=error-notifier-config</code></pre></div>
+      <p>This creates <code>config/error-notifier.php</code> in your app, and Laravel uses it from then on. After any change, run <code>php artisan config:cache</code> if your app caches config.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Env variable</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>enabled</code></td><td><code>ERROR_NOTIFIER_ENABLED</code></td><td><code>false</code></td><td>Master on/off switch</td></tr>
+            <tr><td><code>channels</code></td><td><code>ERROR_NOTIFIER_CHANNELS</code></td><td><code>telegram</code></td><td>Channels every alert goes to</td></tr>
+            <tr><td><code>title</code></td><td><code>ERROR_NOTIFIER_TITLE</code></td><td>Application Error</td><td>Heading of every alert</td></tr>
+            <tr><td><code>auto_report</code></td><td><code>ERROR_NOTIFIER_AUTO_REPORT</code></td><td><code>true</code></td><td>Hook into Laravel's error handler automatically</td></tr>
+            <tr><td><code>throttle_seconds</code></td><td><code>ERROR_NOTIFIER_THROTTLE</code></td><td><code>60</code></td><td>Silence repeats of the same error for this many seconds (0 = off)</td></tr>
+            <tr><td><code>ignored_environments</code></td><td>–</td><td><code>local</code>, <code>testing</code></td><td>Environments that never send</td></tr>
+            <tr><td><code>excluded_paths</code></td><td>–</td><td>none</td><td>URL paths that never send</td></tr>
+            <tr><td><code>excluded_exceptions</code></td><td>–</td><td>404, login, validation</td><td>Exception types that never send</td></tr>
+            <tr><td><code>include_user</code></td><td>–</td><td><code>true</code></td><td>Show the logged-in user's ID</td></tr>
+            <tr><td><code>user_name_attribute</code></td><td>–</td><td><code>name</code></td><td>User field shown next to the ID</td></tr>
+            <tr><td><code>include_ip</code></td><td>–</td><td><code>true</code></td><td>Show the visitor's IP address</td></tr>
+            <tr><td><code>trace_lines</code></td><td>–</td><td><code>0</code></td><td>Stack trace lines to include</td></tr>
+            <tr><td><code>queue.enabled</code></td><td><code>ERROR_NOTIFIER_QUEUE</code></td><td><code>false</code></td><td>Send from a queue worker</td></tr>
+            <tr><td><code>drivers.&lt;channel&gt;</code></td><td>per channel</td><td>see <a href="#channels">channels</a></td><td>Credentials, <code>rate_limit</code>, <code>only_exceptions</code>, <code>except_exceptions</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><span class="tag">Updates</span><p>Your published file is not updated when the package is. New top-level settings still work with their defaults, but new channels or channel settings inside <code>drivers</code> only apply once you add them to your file. To see the latest defaults, commit your file and re-publish with <code>--force</code>, then copy back your changes.</p></div>
+    </section>
+
+    <section id="alert">
+      <h2><span class="n">08</span>Reading an alert</h2>
+      <p>Every alert has the same fields, whatever the channel; only the layout differs (see the <a href="#top-alert">example at the top</a>). Start with <strong>Exception</strong> and <strong>Message</strong> to see what broke, then <strong>File</strong> to find it in the code.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Title</td><td>Your <code>ERROR_NOTIFIER_TITLE</code>, to tell apps apart</td></tr>
+            <tr><td>Project</td><td>Your <code>APP_NAME</code></td></tr>
+            <tr><td>Environment</td><td>Your <code>APP_ENV</code></td></tr>
+            <tr><td>Exception</td><td>The type of error</td></tr>
+            <tr><td>Message</td><td>What went wrong, cut at 1,000 characters</td></tr>
+            <tr><td>Request</td><td>The URL that failed (web errors only)</td></tr>
+            <tr><td>User</td><td>Logged-in user ID and name, or Guest</td></tr>
+            <tr><td>IP</td><td>Visitor's IP address</td></tr>
+            <tr><td>Command</td><td>The artisan command that failed (console and queue errors only)</td></tr>
+            <tr><td>File / Line</td><td>Where it happened, relative to the project root</td></tr>
+            <tr><td>Trace</td><td>First lines of the stack trace, if <code>trace_lines</code> is above 0</td></tr>
+            <tr><td>Time</td><td>When it happened, in your app's timezone</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">Very long messages and traces are shortened to fit each service's size limit; the full error is always in <code>storage/logs/laravel.log</code>.</p>
+    </section>
+
+    <section id="troubleshooting">
+      <h2><span class="n">09</span>Troubleshooting</h2>
+      <p>Start with <code>php artisan error-notifier:test</code>: it prints <code>sent</code> or the exact error for each channel. Delivery problems are also logged in <code>storage/logs/laravel.log</code> as <strong>Error notifier failed</strong> with the channel name.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Problem</th><th>Likely cause</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Test works, real errors never arrive</td><td><code>ERROR_NOTIFIER_ENABLED</code> is not <code>true</code>, or <code>APP_ENV</code> is <code>local</code>/<code>testing</code></td><td>Set <code>ERROR_NOTIFIER_ENABLED=true</code>; check <code>ignored_environments</code></td></tr>
+            <tr><td>Changes in <code>.env</code> have no effect</td><td>Config is cached</td><td>Run <code>php artisan config:cache</code></td></tr>
+            <tr><td><code>&lt;channel&gt; is not configured</code></td><td>The channel's env variable is empty</td><td>Add it to <code>.env</code>, then rebuild the config cache</td></tr>
+            <tr><td><code>Driver [name] not supported</code></td><td>Typo in <code>ERROR_NOTIFIER_CHANNELS</code>, or a new channel missing from an older published config</td><td>Check the spelling (<code>google_chat</code>, not <code>googlechat</code>); add the channel under <code>drivers</code> in your published file</td></tr>
+            <tr><td>Telegram <code>chat not found</code></td><td>Wrong chat ID, or the bot isn't in the group</td><td>Add the bot to the group, send a message, read <code>getUpdates</code> again</td></tr>
+            <tr><td>Teams returns an error or nothing appears</td><td>An old Office 365 connector URL</td><td>Create a new <a href="#setup-teams">Workflows webhook</a></td></tr>
+            <tr><td>Some errors never arrive</td><td>Excluded exception type (404, login, validation), excluded path, or the same error repeated within 60 seconds</td><td>Expected; adjust <code>excluded_exceptions</code>, <code>excluded_paths</code> or <code>ERROR_NOTIFIER_THROTTLE</code></td></tr>
+            <tr><td><code>rate limit reached</code> in the log</td><td>More errors per minute than the channel's limit</td><td>Fix the error flood; raise <code>rate_limit</code> only if the service allows it</td></tr>
+            <tr><td>Queue is on but nothing arrives</td><td>No queue worker running</td><td>Start <code>php artisan queue:work</code> (or check Supervisor)</td></tr>
+            <tr><td>The same error arrives twice</td><td>Both this package and an old manual call in <code>Handler.php</code> report it</td><td>Remove the old manual call</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="security">
+      <h2><span class="n">10</span>Security and good practice</h2>
+      <p>Treat every token and webhook URL as a password: anyone who has one can post into your channel.</p>
+      <ul class="checks">
+        <li><strong>Keep secrets in <code>.env</code> only.</strong> Never put real tokens or webhook URLs in <code>config/error-notifier.php</code>, <code>.env.example</code> or git.</li>
+        <li><strong>Logs stay clean.</strong> When a channel fails, the logged error has bot tokens, webhook paths and routing keys replaced with <code>***</code>.</li>
+        <li><strong>Alerts contain personal data.</strong> They include user IDs and names, IP addresses and URLs with query strings. Send them only to private channels your team controls. Turn off <code>include_user</code> or <code>include_ip</code> if your privacy policy requires it.</li>
+        <li><strong>Exception messages can contain secrets.</strong> Some libraries put passwords or API keys in error text. Add those exception types to <code>excluded_exceptions</code>, or keep <code>trace_lines</code> at 0.</li>
+        <li><strong>No accidental pings.</strong> Text inside an error can't trigger <code>@everyone</code>, <code>@channel</code> or formatting in Slack, Discord, Mattermost or Teams.</li>
+        <li><strong>Verify webhook calls.</strong> When using the webhook channel, set <code>ERROR_NOTIFIER_WEBHOOK_SECRET</code> and check the signature on the receiving side.</li>
+        <li><strong>Rotate on leaks.</strong> If a token or webhook URL is ever exposed, create a new one in the service and update <code>.env</code>; the old one keeps working until you delete it.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <span>Laravel Error Notifier · MIT licence</span>
+      <a href="https://github.com/msahidurr/laravel-error-notifier" target="_blank" rel="noopener">github.com/msahidurr/laravel-error-notifier</a>
+      <a href="https://packagist.org/packages/msahidurr/laravel-error-notifier" target="_blank" rel="noopener">Packagist</a>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // Copy button in each code block's top bar; falls back to selecting the text.
+  document.querySelectorAll('.code').forEach(function (block) {
+    var pre = block.querySelector('pre');
+    var bar = block.querySelector('.code-bar');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy';
+    btn.textContent = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.addEventListener('click', function () {
+      // Leave out shell prompts and sample output lines.
+      var clone = pre.cloneNode(true);
+      clone.querySelectorAll('.p').forEach(function (n) { n.remove(); });
+      var text = clone.innerText.split('\n').filter(function (l) { return l.indexOf('✔') !== 0; }).join('\n').trim();
+      var done = function () {
+        btn.textContent = 'Copied';
+        btn.classList.add('done');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1500);
+      };
+      var select = function () {
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = 'Ctrl+C';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, select);
+      } else {
+        select();
+      }
+    });
+    bar.appendChild(btn);
+  });
+
+  // Highlight the current section in the contents rail.
+  (function () {
+    if (!('IntersectionObserver' in window)) return;
+    var links = {};
+    document.querySelectorAll('.toc a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        Object.keys(links).forEach(function (id) { links[id].classList.toggle('active', id === entry.target.id); });
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    document.querySelectorAll('main section[id]').forEach(function (s) { observer.observe(s); });
+  })();
+</script>
+</body>
+</html>
