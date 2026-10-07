@@ -30,12 +30,13 @@ class ErrorReportFactory
             appName: (string) $this->app['config']->get('app.name'),
             environment: $this->app->environment(),
             exceptionClass: get_class($exception),
-            message: Str::limit($exception->getMessage(), 1000),
-            file: $this->relativePath($exception->getFile()),
+            message: $this->clean(Str::limit($this->clean($exception->getMessage()), 1000)),
+            file: $this->clean($this->relativePath($exception->getFile())),
             line: $exception->getLine(),
-            context: $this->context(),
-            trace: $trace,
+            context: array_map(fn ($value) => $this->clean((string) $value), $this->context()),
+            trace: $trace === null ? null : $this->clean($trace),
             time: now(),
+            fingerprint: $this->fingerprint($exception),
             exception: $exception,
         );
     }
@@ -64,6 +65,28 @@ class ErrorReportFactory
         }
 
         return $context;
+    }
+
+    /**
+     * Stable hash identifying "the same error": class + file + line + message.
+     */
+    public function fingerprint(Throwable $exception): string
+    {
+        return sha1(implode('|', [
+            get_class($exception),
+            $exception->getFile(),
+            $exception->getLine(),
+            $exception->getMessage(),
+        ]));
+    }
+
+    /**
+     * Replace invalid UTF-8 bytes, which would otherwise break JSON encoding
+     * for every channel.
+     */
+    protected function clean(string $value): string
+    {
+        return mb_check_encoding($value, 'UTF-8') ? $value : mb_convert_encoding($value, 'UTF-8', 'UTF-8');
     }
 
     /**
